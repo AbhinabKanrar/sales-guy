@@ -81,8 +81,10 @@ def process_directory():
         df = pd.read_csv(file_path)
         results = []
         
-        for index, row in df.iterrows():
+        for _, row in df.iterrows():
             draft = generate_email(row['first_name'], row['company_name'], row['industry'], row['job_title'])
+
+            print(f"OpenRouter response: {draft}")
             
             lead_data = {
                 "lead_id": row['lead_id'],
