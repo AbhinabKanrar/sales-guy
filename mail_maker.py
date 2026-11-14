@@ -21,18 +21,19 @@ def generate_email(first_name, company, industry, job_title):
         "You engineer mission-critical, air-gapped AI enterprise platforms for highly regulated sectors. "
         "Your objective is to write a ruthlessly concise, hyper-technical cold email to an IT executive. "
         "STRICT CONSTRAINTS: "
-        "1. Maximum 4-5 sentences. "
-        "2. ZERO marketing fluff. Do NOT use words like 'cutting-edge', 'revolutionary', 'unlock', or 'synergy'. "
-        "3. Tone: Direct, intellectually heavy, peer-to-peer CTO level. No fake enthusiasm. "
-        "4. DO NOT start with 'I hope this finds you well' or 'My name is...'. "
+        "1. You MUST start the email by addressing the prospect by their first name on the first line (e.g., 'John,'). "
+        "2. Maximum 5 sentences following the greeting. "
+        "3. ZERO marketing fluff. Do NOT use words like 'quick chat', 'synergy', 'touch base', or 'revolutionary'. "
+        "4. Tone: Direct, intellectually heavy, peer-to-peer CTO level. No fake enthusiasm. "
+        "5. DO NOT use generic pleasantries like 'I hope this finds you well'. "
+        "6. FORMATTING: You MUST use blank lines (paragraph breaks) to separate the sections. Do not write a single wall of text. "
         "STRUCTURE: "
-        "Sentence 1: State a blunt, technical observation about the difficulty of integrating AI into legacy monoliths within their specific [Industry] without violating compliance. "
-        "Sentence 2: Explain how you solve this using Mabsisa's 'Zero-Data-Leakage Sovereign Enclaves'—deconstructing their monolith into serverless, asynchronous neural pipelines. "
-        "Sentence 3: Emphasize the security constraint (e.g., 100% proprietary IP ownership, hardware-level encryption, zero external data egress). "
-        "Sentence 4: A low-friction, high-value Call to Action (e.g., offering to spin up a bespoke, functional UI prototype connected to a dummy dataset within 24 hours to prove the architecture). "
-        "Sign off simply as 'Abhinab Kanrar | Founder, Mabsisa Inc.'."
+        "Greeting: [First Name],\n\n"
+        "Paragraph 1 (Sentence 1): State a blunt, technical observation about the difficulty of integrating AI into legacy monoliths within their specific [Industry] without violating compliance.\n\n"
+        "Paragraph 2 (Sentences 2 & 3): Explain how Mabsisa resolves this via 'Zero-Data-Leakage Sovereign Enclaves'—deconstructing their monolith into serverless, asynchronous neural pipelines. Emphasize the security constraints (100% proprietary IP ownership, hardware-level encryption, zero external data egress).\n\n"
+        "Paragraph 3 (Sentences 4 & 5): Offer to deploy a bespoke, functional UI prototype connected to a dummy dataset within 24 hours. Propose a brief technical scoping call to review their specific integration constraints.\n\n"
+        "Sign-off:\nBest,\nAbhinab Kanrar | Founder, Mabsisa Inc. | mabsisa.com"
     )
-
     
     prompt = f"Prospect Name: {first_name}\nJob Title: {job_title}\nCompany: {company}\nIndustry: {industry}"
     
@@ -81,10 +82,10 @@ def process_directory():
         df = pd.read_csv(file_path)
         results = []
         
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             draft = generate_email(row['first_name'], row['company_name'], row['industry'], row['job_title'])
 
-            print(f"OpenRouter response: {draft}")
+            print(f"Completed: {index}")
             
             lead_data = {
                 "lead_id": row['lead_id'],
