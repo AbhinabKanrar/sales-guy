@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import time
 from mail_engine import MailEngine
 
 INPUT_DIR = "emails"
@@ -65,6 +66,9 @@ def process_directory(mailer : MailEngine):
                 job_title = draft.get('job_title', '')
                 subject_line = generate_subject(industry, job_title, company)
 
+                mailer.send_email(recipient, body, subject_line)
+
+                time.sleep(75)
 
 if __name__ == "__main__":
     mailer = MailEngine(default_from="abhinab.kanrar@mabsisa.com")
