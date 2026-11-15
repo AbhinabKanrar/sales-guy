@@ -3,19 +3,37 @@ import pandas as pd
 import requests
 import json
 import time
+import random
 import glob
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURATION ---
 INPUT_DIR = "leads"
 OUTPUT_JSON_DIR = "emails"
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "your_openrouter_api_key_here")
 
-def generate_email(first_name, company, industry, job_title):
+# Setting the model back to your preferred Nvidia model
+MODEL = "nvidia/nemotron-3.5-super-vl:free"
+
+# 5 concurrent threads is safe. If you get too many 429s, lower this to 3.
+MAX_CONCURRENT_CALLS = 3
+
+MAX_RETRIES = 5
+
+def generate_email(row):
+    # JITTER: Random micro-delay so threads don't hit the API at the exact same millisecond
+    time.sleep(random.uniform(0.1, 1.5))
+    
+    first_name = row['first_name']
+    company = row['company_name']
+    industry = row['industry']
+    job_title = row['job_title']
+    
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
-
+    
     system_prompt = (
         "You are Abhinab Kanrar, the Founder and Systems Architect at Mabsisa Inc. (Toronto, Canada). "
         "You engineer mission-critical, air-gapped AI enterprise platforms for highly regulated sectors. "
@@ -38,54 +56,57 @@ def generate_email(first_name, company, industry, job_title):
     prompt = f"Prospect Name: {first_name}\nJob Title: {job_title}\nCompany: {company}\nIndustry: {industry}"
     
     payload = {
-        "model": "nvidia/nemotron-3.5-super-vl:free",
+        "model": MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.4
+        "temperature": 0.7
     }
     
-    try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+            
+            # Explicitly catch 429 Rate Limits
+            if response.status_code == 429:
+                # Progressive backoff: 5s, then 10s, then 15s
+                wait_time = 5 * (attempt + 1) 
+                print(f"Rate limit (429) for {first_name}. Thread pausing for {wait_time}s (Attempt {attempt + 1}/{MAX_RETRIES})...")
+                time.sleep(wait_time)
+                continue
+                
+            if response.status_code != 200:
+                print(f"OpenRouter Error ({response.status_code}) for {first_name}: {response.text}")
+                return None
+                
+            return response.json()['choices'][0]['message']['content'].strip()
+            
+        except Exception as e:
+            print(f"Request failed for {first_name} at {company}: {e}")
+            time.sleep(3) # Wait briefly on a network failure before retrying
+            
+    print(f"Failed to generate email for {first_name} after {max_retries} attempts.")
+    return None
 
-        if response.status_code != 200:
-            print(f"OpenRouter Error ({response.status_code}): {response.text}")
-            return None
-
-        return response.json()['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        print(f"Error generating email for {first_name} at {company}: {e}")
-        return None
-
-def process_directory():
-    print(f"Scanning for chunked CSVs in {INPUT_DIR}/...")
-    csv_files = glob.glob(os.path.join(INPUT_DIR, "*.csv"))
+def process_chunk(file_path):
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    json_output_path = os.path.join(OUTPUT_JSON_DIR, f"{base_name}.json")
     
-    if not csv_files:
-        print(f"No CSV files found in {INPUT_DIR}/. Run the adapter script first.")
+    if os.path.exists(json_output_path):
+        print(f"Skipping {file_path} - JSON already exists.")
         return
         
-    os.makedirs(OUTPUT_JSON_DIR, exist_ok=True)
+    print(f"Processing {file_path} in parallel (Max {MAX_CONCURRENT_CALLS} threads)...")
+    df = pd.read_csv(file_path)
+    results = []
     
-    for file_path in csv_files:
-        # Extract base name (e.g., '1' from 'output_chunks/1.csv')
-        base_name = os.path.splitext(os.path.basename(file_path))[0]
-        json_output_path = os.path.join(OUTPUT_JSON_DIR, f"{base_name}.json")
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CALLS) as executor:
+        future_to_row = {executor.submit(generate_email, row): row for _, row in df.iterrows()}
         
-        # Skip if already processed
-        if os.path.exists(json_output_path):
-            print(f"Skipping {file_path} - JSON already exists.")
-            continue
-            
-        print(f"Processing {file_path}...")
-        df = pd.read_csv(file_path)
-        results = []
-        
-        for index, row in df.iterrows():
-            draft = generate_email(row['first_name'], row['company_name'], row['industry'], row['job_title'])
-
-            print(f"Completed: {index}")
+        for future in as_completed(future_to_row):
+            row = future_to_row[future]
+            draft = future.result()
             
             lead_data = {
                 "lead_id": row['lead_id'],
@@ -99,14 +120,24 @@ def process_directory():
             }
             results.append(lead_data)
             
-            # API rate limit delay
-            time.sleep(1)
-            
-        # Save JSON
-        with open(json_output_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=4, ensure_ascii=False)
-            
-        print(f"Saved {len(results)} drafts to {json_output_path}")
+    # Save JSON
+    with open(json_output_path, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=4, ensure_ascii=False)
+        
+    print(f"Successfully drafted and saved {len(results)} emails to {json_output_path}")
+
+def process_directory():
+    print(f"Scanning for chunked CSVs in {INPUT_DIR}/...")
+    csv_files = glob.glob(os.path.join(INPUT_DIR, "*.csv"))
+    
+    if not csv_files:
+        print(f"No CSV files found in {INPUT_DIR}/. Run the adapter script first.")
+        return
+        
+    os.makedirs(OUTPUT_JSON_DIR, exist_ok=True)
+    
+    for file_path in csv_files:
+        process_chunk(file_path)
 
 if __name__ == "__main__":
     process_directory()
