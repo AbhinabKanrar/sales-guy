@@ -24,6 +24,8 @@ class MailEngine:
     def send_email(self, to_address, body, subject):
         """Builds and sends a single email using the open connection."""
 
+        self.ensure_connection()
+
         message = MIMEMultipart()
         message["From"] = self.default_from
         message["To"] = to_address
@@ -33,6 +35,28 @@ class MailEngine:
 
         # Send the email using the active server connection
         self.server.send_message(message)
+
+    def ensure_connection(self):
+        try:
+            code, _ = self.server.noop()
+        except (smtplib.SMTPServerDisconnected, OSError):
+            self.reconnect()
+        else:
+            if code != 250:
+                self.reconnect()
+
+    def reconnect(self):
+        # Close the old socket without relying on a working SMTP session.
+        self.server.close()
+
+        self.server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+        self.server.ehlo()
+        self.server.starttls()
+        self.server.ehlo()
+
+        print("ReLogging in...")
+        self.server.login(self.default_from, self.password)
+        print("Ready to send emails")
 
     def close_connection(self):
         """Safely closes the connection to Zoho's servers."""

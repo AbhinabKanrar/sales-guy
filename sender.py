@@ -2,6 +2,7 @@ import os
 import glob
 import json
 import time
+import traceback
 from mail_engine import MailEngine
 
 INPUT_DIR = "emails"
@@ -70,7 +71,8 @@ def process_directory(mailer : MailEngine):
                 try:
                     mailer.send_email(recipient, body, subject_line)
                 except Exception as e:
-                    print(f'Unable to send mail to {recipient} from {file_path}')
+                    print(f'Unable to send mail to {recipient} from {file_path}. Root cause: {e}')
+                    traceback.print_exc()
                 finally:
                     time.sleep(75)
 
