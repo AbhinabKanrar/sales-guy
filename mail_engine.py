@@ -33,7 +33,6 @@ class MailEngine:
 
         # Send the email using the active server connection
         self.server.send_message(message)
-        print(f"Email sent successfully to {to_address}")
 
     def close_connection(self):
         """Safely closes the connection to Zoho's servers."""

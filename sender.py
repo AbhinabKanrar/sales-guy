@@ -53,6 +53,7 @@ def process_directory(mailer : MailEngine):
 
     for file_path in json_files:
         with open(file_path, "r", encoding="utf-8") as file:
+            print(f'Starting processing: {file_path}')
             drafts = json.load(file)
             for draft in drafts:
                 if not draft.get('generated_draft'):
@@ -66,9 +67,14 @@ def process_directory(mailer : MailEngine):
                 job_title = draft.get('job_title', '')
                 subject_line = generate_subject(industry, job_title, company)
 
-                mailer.send_email(recipient, body, subject_line)
+                try:
+                    mailer.send_email(recipient, body, subject_line)
+                except Exception as e:
+                    print(f'Unable to send mail to {recipient} from {file_path}')
+                finally:
+                    time.sleep(75)
 
-                time.sleep(75)
+            print(f'Completed processing: {file_path}')
 
 if __name__ == "__main__":
     mailer = MailEngine(default_from="abhinab.kanrar@mabsisa.com")
